@@ -1,0 +1,14 @@
+{
+  "name": "hireflow-backend",
+  "version": "1.0.0",
+  "description": "HireFlow API Backend",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
+
