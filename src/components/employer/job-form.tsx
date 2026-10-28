@@ -348,11 +348,7 @@ export function JobForm({
       ) : null}
 
       <div className="flex flex-col gap-3 border-t border-border pt-6 sm:flex-row sm:items-center">
-        <Button
-          type="submit"
-          disabled={submitting !== null}
-          onClick={() => void 0}
-        >
+        <Button type="submit" disabled={submitting !== null}>
           {submitting === "active" ? "Publishing…" : job ? "Save changes" : "Publish job"}
         </Button>
         <Button

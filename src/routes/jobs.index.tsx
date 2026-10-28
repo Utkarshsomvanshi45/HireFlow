@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { employmentTypeOptions, formatSalary, postedDaysAgo } from "@/lib/format";
+import { employmentTypeOptions } from "@/lib/format";
 import { listJobs } from "@/services/jobs.service";
 import type { EmploymentType, Job } from "@/types";
 import { useEffect, useMemo, useState } from "react";
@@ -253,12 +253,11 @@ function JobsPage() {
             )}
           </div>
 
-          {/* Salary note keeps expectations clear without cluttering cards */}
+          {/* Keeps expectations clear without cluttering the cards */}
           {allJobs && visible.length > 0 ? (
             <p className="mt-10 text-xs text-muted-foreground">
-              Salary ranges are yearly figures in the currency shown on each job.
-              Sample listings: {visible.length > 0 ? formatSalary(visible[0]).includes("disclosed") ? "" : "" : ""}
-              {visible.some((job) => postedDaysAgo(job.postedAt) > 30) ? "Some roles may close without notice." : ""}
+              Salary ranges are yearly figures in USD. Some roles may close
+              without notice.
             </p>
           ) : null}
         </div>
