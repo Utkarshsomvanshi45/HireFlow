@@ -15,7 +15,7 @@ export function JobCard({ job, className }: { job: Job; className?: string }) {
       to="/jobs/$id"
       params={{ id: job.id }}
       className={cn(
-        "block rounded-xl border border-border bg-card transition-shadow duration-200 hover:card-shadow-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+        "group block rounded-xl border border-border bg-card transition-shadow duration-200 hover:card-shadow-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
         className,
       )}
     >
