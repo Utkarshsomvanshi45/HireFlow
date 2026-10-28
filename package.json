@@ -4,6 +4,11 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:backend": "npm run dev --prefix backend",
+    "build:frontend": "npm run build --prefix frontend",
+    "build:backend": "npm run build --prefix backend",
+    "test:backend": "npm run test --prefix backend",
     "dev": "vite dev",
     "build": "vite build",
     "build:dev": "vite build --mode development",

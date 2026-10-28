@@ -1,6 +1,13 @@
 import fs from "fs";
 import path from "path";
 import os from "os";
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export interface StoredResume {
   key: string;
@@ -76,13 +83,23 @@ class LocalPrivateStorageService implements StorageService {
 
 /**
  * S3-compatible cloud object storage adapter (AWS S3, Cloudflare R2, Supabase Storage).
- * Enabled when STORAGE_BUCKET and cloud credentials are configured.
+ * Enabled automatically when STORAGE_BUCKET and cloud credentials are configured.
  */
 class S3ObjectStorageService implements StorageService {
+  private client: S3Client;
   private bucket: string;
 
   constructor(bucket: string) {
     this.bucket = bucket;
+    this.client = new S3Client({
+      region: process.env.AWS_REGION || "us-east-1",
+      endpoint: process.env.STORAGE_ENDPOINT || undefined,
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
+      },
+      forcePathStyle: Boolean(process.env.STORAGE_ENDPOINT),
+    });
   }
 
   async save(file: Express.Multer.File, ownerId: string): Promise<StoredResume> {
@@ -90,28 +107,77 @@ class S3ObjectStorageService implements StorageService {
     const safeFilename = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
     const key = `resumes/${ownerId}/${timestamp}_${safeFilename}`;
 
-    // Cloud object storage provider implementation:
-    // Requires AWS SDK v3 (@aws-sdk/client-s3) or cloud-specific client.
-    // When configured with real credentials, uploads with server-side encryption (AES256).
-    throw new Error(
-      `Remote object storage is configured for bucket "${this.bucket}", but cloud credentials have not been configured yet.`
-    );
+    const command = new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      Body: file.buffer,
+      ContentType: "application/pdf",
+      ServerSideEncryption: "AES256",
+      Metadata: {
+        ownerId,
+        originalFilename: file.originalname,
+      },
+    });
+
+    await this.client.send(command);
+
+    return {
+      key,
+      filename: file.originalname,
+      size: file.size,
+    };
   }
 
-  async read(_key: string): Promise<Buffer | null> {
-    throw new Error("Remote object storage download requires configured cloud provider credentials.");
+  async read(key: string): Promise<Buffer | null> {
+    try {
+      const command = new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      });
+      const response = await this.client.send(command);
+      if (!response.Body) return null;
+      const bytes = await response.Body.transformToByteArray();
+      return Buffer.from(bytes);
+    } catch {
+      return null;
+    }
   }
 
-  async delete(_key: string): Promise<void> {
-    throw new Error("Remote object storage deletion requires configured cloud provider credentials.");
+  async delete(key: string): Promise<void> {
+    try {
+      const command = new DeleteObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      });
+      await this.client.send(command);
+    } catch {
+      // Ignore if already deleted
+    }
+  }
+
+  async getDownloadUrl(key: string): Promise<string | null> {
+    try {
+      const command = new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      });
+      // Presigned download URL expires in 15 minutes
+      return await getSignedUrl(this.client, command, { expiresIn: 900 });
+    } catch {
+      return null;
+    }
   }
 }
 
 function createStorageService(): StorageService {
   const remoteBucket = process.env.STORAGE_BUCKET;
-  if (remoteBucket && process.env.AWS_ACCESS_KEY_ID) {
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+
+  if (remoteBucket && accessKeyId && secretAccessKey) {
     return new S3ObjectStorageService(remoteBucket);
   }
+
   return new LocalPrivateStorageService();
 }
 

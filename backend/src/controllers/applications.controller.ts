@@ -321,6 +321,14 @@ export async function downloadResume(req: AuthenticatedRequest, res: Response): 
     return;
   }
 
+  if (storageService.getDownloadUrl) {
+    const signedUrl = await storageService.getDownloadUrl(application.resumeUrl).catch(() => null);
+    if (signedUrl) {
+      res.redirect(signedUrl);
+      return;
+    }
+  }
+
   const fileBuffer = await storageService.read(application.resumeUrl);
   if (!fileBuffer) {
     res.status(404).json({ message: "Resume file is missing from storage." });

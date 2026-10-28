@@ -334,4 +334,65 @@ describe("HireFlow Backend API Automated Test Suite", () => {
       expect(res.body.message).toContain('not authorized');
     });
   });
+
+  // 7. Closed Job Applications & Job Lifecycle Restrictions
+  describe('Job Lifecycle Restrictions & Applying to Closed Jobs', () => {
+    let closedJobId;
+
+    it('should allow employer to close their active job', async () => {
+      const res = await request(app)
+        .patch('/api/jobs/' + createdJobId)
+        .set('Cookie', employerCookie)
+        .send({ status: 'closed' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('closed');
+      closedJobId = res.body.id;
+    });
+
+    it('should reject application to a closed job', async () => {
+      // Register a fresh candidate who hasn't applied to this job yet
+      const freshEmail = 'fresh_candidate_' + Date.now() + '@test.com';
+      const regRes = await request(app).post('/api/auth/register').send({
+        name: 'Fresh Candidate',
+        email: freshEmail,
+        password: 'securePassword123!',
+        role: 'candidate',
+      });
+      const freshCookie = regRes.headers['set-cookie'][0].split(';')[0];
+
+      const res = await request(app)
+        .post('/api/applications')
+        .set('Cookie', freshCookie)
+        .send({ jobId: closedJobId });
+
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain('closed and no longer accepting applications');
+    });
+  });
+
+  // 8. Session Invalidation & Logout Workflow
+  describe('Session Invalidation on Logout', () => {
+    it('should invalidate session upon logout and reject subsequent authenticated requests', async () => {
+      // 1. Verify candidate is authenticated
+      const beforeRes = await request(app)
+        .get('/api/auth/me')
+        .set('Cookie', candidateCookie);
+      expect(beforeRes.status).toBe(200);
+
+      // 2. Perform logout
+      const logoutRes = await request(app)
+        .post('/api/auth/logout')
+        .set('Cookie', candidateCookie);
+      expect(logoutRes.status).toBe(200);
+      expect(logoutRes.body.message).toContain('Signed out successfully');
+
+      // 3. Ensure subsequent request with that session cookie is rejected with 401
+      const afterRes = await request(app)
+        .get('/api/auth/me')
+        .set('Cookie', candidateCookie);
+      expect(afterRes.status).toBe(401);
+    });
+  });
+
 });
