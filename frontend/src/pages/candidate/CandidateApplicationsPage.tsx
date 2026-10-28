@@ -20,7 +20,7 @@ import { getJob } from "@/services/jobs.service";
 import type { Application, Job } from "@/types";
 
 interface EnrichedApplication extends Application {
-  job?: Job;
+  job?: Job | null;
 }
 
 export function CandidateApplicationsPage() {

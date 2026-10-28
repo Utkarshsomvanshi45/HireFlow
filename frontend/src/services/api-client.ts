@@ -8,7 +8,7 @@
  * When VITE_API_BASE_URL is not configured (the default in this prototype),
  * USE_MOCKS is true and service modules fall back to the mock data store in
  * src/data/mock. The API layer below is real, typed fetch code that the
- * separately deployed Express + Prisma + Neon backend can serve as-is.
+ * separately deployed Express + Prisma + Neon backend serves directly.
  */
 
 export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").trim();
@@ -29,14 +29,12 @@ export class ApiError extends Error {
 interface RequestOptions {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
-  /** JWT or session token, supplied by the auth layer once the backend exists. */
+  /** Optional bearer token if not using cookies */
   token?: string;
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   if (USE_MOCKS) {
-    // No backend configured: services short-circuit to mocks before calling
-    // into this client, so reaching this point is a wiring mistake.
     throw new ApiError(
       "API base URL is not configured — the app is running on mock data.",
       501,
@@ -47,9 +45,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       method: options.method ?? "GET",
+      credentials: "include", // Send and receive HTTP-only session cookies
       headers: {
         "Content-Type": "application/json",
-        ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
+        ...((options.token || (typeof window !== 'undefined' ? localStorage.getItem('hireflow_token') : null)) ? { Authorization: 'Bearer ' + (options.token || localStorage.getItem('hireflow_token')) } : {}),
       },
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     });
@@ -73,6 +72,8 @@ export const api = {
   get: <T>(path: string, options?: RequestOptions) => request<T>(path, options),
   post: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     request<T>(path, { ...options, method: "POST", body }),
+  put: <T>(path: string, body?: unknown, options?: RequestOptions) =>
+    request<T>(path, { ...options, method: "PUT", body }),
   patch: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     request<T>(path, { ...options, method: "PATCH", body }),
   delete: <T>(path: string, options?: RequestOptions) =>

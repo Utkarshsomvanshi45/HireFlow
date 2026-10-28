@@ -154,7 +154,6 @@ const nextId = () => `app-${++counter}`.padStart(8, "0");
 
 export const mockApplications: Application[] = seeds.map((seed, index) => ({
   id: `app-${String(index + 1).padStart(3, "0")}`,
-  jobId: seed.jobId,
   candidateId: mockUsers.find((u) => u.email === seed.candidateEmail)?.id ?? "user-external",
   ...seed,
 }));

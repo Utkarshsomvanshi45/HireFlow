@@ -11,10 +11,8 @@ import type { RegisterInput, Session, User } from "@/types";
 /**
  * Authentication service.
  *
- * While USE_MOCKS is true this is a labelled demo flow: any valid email with
- * an 8+ character password signs into sample data, and nothing pretends to be
- * production auth. The real-API branch below is the contract the Express
- * backend will implement (POST /auth/login, POST /auth/register, GET /auth/me).
+ * When USE_MOCKS is false, connects to Express + Prisma backend via HTTP-only
+ * session cookies. When true, falls back to in-memory demo data.
  */
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -27,7 +25,11 @@ export function validateCredentials(email: string, password: string): string | n
 
 export async function login(email: string, password: string): Promise<Session> {
   if (!USE_MOCKS) {
-    const session = await api.post<Session>("/auth/login", { email, password });
+    const res = await api.post<{ user: User; token?: string }>("/auth/login", { email, password });
+    if (res.token && typeof window !== 'undefined') {
+      localStorage.setItem('hireflow_token', res.token);
+    }
+    const session: Session = { user: res.user, token: res.token };
     setSession(session);
     return session;
   }
@@ -39,7 +41,6 @@ export async function login(email: string, password: string): Promise<Session> {
   const normalized = email.trim().toLowerCase();
   const existing =
     mockUsers.find((user) => user.email.toLowerCase() === normalized) ??
-    // Unknown email: sign in as a fresh candidate with sample data attached.
     ({
       ...demoCandidate,
       id: `user-demo-${normalized.replace(/[^a-z0-9]/g, "-")}`,
@@ -59,7 +60,11 @@ export async function login(email: string, password: string): Promise<Session> {
 
 export async function register(input: RegisterInput): Promise<Session> {
   if (!USE_MOCKS) {
-    const session = await api.post<Session>("/auth/register", input);
+    const res = await api.post<{ user: User; token?: string }>("/auth/register", input);
+    if (res.token && typeof window !== 'undefined') {
+      localStorage.setItem('hireflow_token', res.token);
+    }
+    const session: Session = { user: res.user, token: res.token };
     setSession(session);
     return session;
   }
@@ -89,15 +94,38 @@ export async function fetchCurrentUser(): Promise<User | null> {
   if (!USE_MOCKS) {
     try {
       const user = await api.get<User>("/auth/me");
-      return user;
-    } catch {
-      return null;
+      if (user) {
+        const currentSession = getSession();
+        setSession({ user, token: currentSession?.token });
+        return user;
+      } else {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('hireflow_token');
+        }
+        setSession(null);
+        return null;
+      }
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'status' in err && (err as { status: number }).status === 401) {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('hireflow_token');
+        }
+        setSession(null);
+        return null;
+      }
+      return getSession()?.user ?? null;
     }
   }
   return getSession()?.user ?? null;
 }
 
-export function logout(): void {
+export async function logout(): Promise<void> {
+  if (!USE_MOCKS) {
+    await api.post("/auth/logout").catch(() => {});
+  }
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('hireflow_token');
+  }
   setSession(null);
 }
 

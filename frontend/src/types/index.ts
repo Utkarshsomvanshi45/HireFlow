@@ -85,6 +85,7 @@ export interface JobInput {
 
 export interface Session {
   user: User;
+  token?: string;
 }
 
 export interface ApplyInput {

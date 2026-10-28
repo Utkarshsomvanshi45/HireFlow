@@ -3,6 +3,8 @@ import { mockApplications, nextId } from "@/data/mock/applications";
 import { mockJobs } from "@/data/mock/jobs";
 import type { Application, ApplicationStatus, ApplyInput } from "@/types";
 
+export type { Application };
+
 /**
  * Application service.
  *

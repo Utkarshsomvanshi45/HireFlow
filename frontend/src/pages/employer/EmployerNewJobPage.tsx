@@ -32,16 +32,14 @@ export function EmployerNewJobPage() {
         defaultCompanyName={session === "loading" || session === null ? undefined : session.user.companyName}
         onCancel={() => navigate("/employer/jobs")}
         onSubmit={async (input: JobInput, status: JobStatus) => {
-          const job = await createJob(input, 0);
+          await createJob(input, 0);
           toast.success(
             status === "draft" ? "Draft saved" : "Job published",
             { description: status === "draft" ? "Publish it when you're ready." : "Candidates can apply now." },
           );
           navigate("/employer/jobs");
-          return job;
         }}
       />
     </>
   );
 }
-

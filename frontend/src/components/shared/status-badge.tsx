@@ -28,14 +28,17 @@ export function StatusBadge({
   variant?: Variant;
   className?: string;
 }) {
-  const styles = variant === "job" ? jobStyles : applicationStyles;
+  const style =
+    variant === "job"
+      ? jobStyles[status as JobStatus]
+      : applicationStyles[status as ApplicationStatus];
   const label =
     variant === "job"
       ? jobStatusLabels[status as JobStatus]
       : applicationStatusLabels[status as ApplicationStatus];
 
   return (
-    <Badge variant="outline" className={cn("font-medium", styles[status], className)}>
+    <Badge variant="outline" className={cn("font-medium", style, className)}>
       {label}
     </Badge>
   );
