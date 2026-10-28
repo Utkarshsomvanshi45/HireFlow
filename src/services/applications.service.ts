@@ -44,7 +44,12 @@ export async function listApplicationsForJob(jobId: string): Promise<Application
 export async function listApplicationsForCompany(companyName: string): Promise<Application[]> {
   if (!USE_MOCKS) return api.get<Application[]>(`/applications?company=${encodeURIComponent(companyName)}`);
   await mockDelay(350);
-  return store.map((application) => structuredClone(application));
+  const companyJobIds = new Set(
+    mockJobs.filter((job) => job.companyName === companyName).map((job) => job.id),
+  );
+  return store
+    .filter((application) => companyJobIds.has(application.jobId))
+    .map((application) => structuredClone(application));
 }
 
 /** POST /applications */
