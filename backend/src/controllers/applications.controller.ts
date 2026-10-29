@@ -95,8 +95,8 @@ export async function applyToJob(req: AuthenticatedRequest, res: Response): Prom
   }
 
   let resumeName = req.user.resumeName || undefined;
-  let resumeUrl: string | undefined = req.user.resumeUrl || undefined;
-  let resumeAvailable = Boolean(req.user.resumeName || req.user.resumeUrl);
+  let resumeUrl: string | undefined = undefined;
+  let resumeAvailable = Boolean(req.user.resumeName);
 
   // If a file was attached with the application
   if (req.file) {
@@ -104,6 +104,25 @@ export async function applyToJob(req: AuthenticatedRequest, res: Response): Prom
     resumeName = stored.filename;
     resumeUrl = stored.key;
     resumeAvailable = true;
+  } else {
+    // Look up the candidate's latest uploaded resume in storage
+    if (storageService.findLatestKeyForOwner) {
+      const latestKey = await storageService.findLatestKeyForOwner(req.user.id);
+      if (latestKey) {
+        resumeUrl = latestKey;
+        resumeAvailable = true;
+      }
+    }
+    if (!resumeUrl) {
+      const prev = await prisma.application.findFirst({
+        where: { candidateId: req.user.id, resumeUrl: { not: null } },
+        orderBy: { updatedAt: "desc" },
+      });
+      if (prev?.resumeUrl) {
+        resumeUrl = prev.resumeUrl;
+        resumeAvailable = true;
+      }
+    }
   }
 
   const application = await prisma.application.create({
@@ -291,74 +310,6 @@ export async function savePrivateNotes(req: AuthenticatedRequest, res: Response)
   res.status(200).json({ message: "Private notes saved successfully." });
 }
 
-function generateCandidatePdf(
-  candidateName: string,
-  candidateEmail: string,
-  jobTitle: string,
-  candidateTitle?: string | null
-): Buffer {
-  const cleanName = candidateName.replace(/[()\\]/g, "");
-  const cleanEmail = candidateEmail.replace(/[()\\]/g, "");
-  const cleanJob = jobTitle.replace(/[()\\]/g, "");
-  const cleanTitle = (candidateTitle || "Professional").replace(/[()\\]/g, "");
-
-  const content = [
-    "BT",
-    "/F1 20 Tf",
-    "50 720 Td",
-    `(${cleanName}) Tj`,
-    "/F1 12 Tf",
-    "0 -24 Td",
-    `(${cleanTitle} | ${cleanEmail}) Tj`,
-    "0 -28 Td",
-    "/F1 14 Tf",
-    `(Application for: ${cleanJob}) Tj`,
-    "/F1 10 Tf",
-    "0 -24 Td",
-    "(HireFlow Verified Candidate Application Resume) Tj",
-    "0 -18 Td",
-    "(Contact this candidate directly via email to schedule next steps.) Tj",
-    "ET",
-  ].join("\n");
-
-  const streamLength = Buffer.byteLength(content, "utf8");
-
-  const pdf = `%PDF-1.4
-1 0 obj
-<< /Type /Catalog /Pages 2 0 R >>
-endobj
-2 0 obj
-<< /Type /Pages /Kids [3 0 R] /Count 1 >>
-endobj
-3 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>
-endobj
-4 0 obj
-<< /Length ${streamLength} >>
-stream
-${content}
-endstream
-endobj
-5 0 obj
-<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
-endobj
-xref
-0 6
-0000000000 65535 f 
-0000000009 00000 n 
-0000000058 00000 n 
-0000000115 00000 n 
-0000000244 00000 n 
-0000000300 00000 n 
-trailer
-<< /Size 6 /Root 1 0 R >>
-startxref
-400
-%%EOF`;
-
-  return Buffer.from(pdf, "utf-8");
-}
-
 export async function downloadResume(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { id } = req.params; // applicationId
 
@@ -388,7 +339,15 @@ export async function downloadResume(req: AuthenticatedRequest, res: Response): 
   let resumeKey = application.resumeUrl;
   let resumeFilename = application.resumeName;
 
-  // If application has no direct resumeKey, check if candidate has any uploaded resume on other applications
+  // 1. If not set directly on this application, find the latest uploaded resume key for this candidate
+  if (!resumeKey && storageService.findLatestKeyForOwner) {
+    const foundKey = await storageService.findLatestKeyForOwner(application.candidateId);
+    if (foundKey) {
+      resumeKey = foundKey;
+    }
+  }
+
+  // 2. If still not set, check other applications by this candidate
   if (!resumeKey) {
     const candidateApp = await prisma.application.findFirst({
       where: {
@@ -400,18 +359,27 @@ export async function downloadResume(req: AuthenticatedRequest, res: Response): 
     if (candidateApp?.resumeUrl) {
       resumeKey = candidateApp.resumeUrl;
       resumeFilename = candidateApp.resumeName || resumeFilename;
-      await prisma.application.update({
-        where: { id: application.id },
-        data: {
-          resumeUrl: candidateApp.resumeUrl,
-          resumeName: candidateApp.resumeName || resumeFilename,
-          resumeAvailable: true,
-        },
-      }).catch(() => {});
     }
   }
 
-  if (resumeKey && storageService.getDownloadUrl) {
+  // Save the resolved key back to this application for fast future downloads
+  if (resumeKey && (!application.resumeUrl || application.resumeUrl !== resumeKey)) {
+    await prisma.application.update({
+      where: { id: application.id },
+      data: {
+        resumeUrl: resumeKey,
+        resumeName: resumeFilename || application.resumeName || "resume.pdf",
+        resumeAvailable: true,
+      },
+    }).catch(() => {});
+  }
+
+  if (!resumeKey) {
+    res.status(404).json({ message: "No resume attached. The candidate has not uploaded a resume file." });
+    return;
+  }
+
+  if (storageService.getDownloadUrl) {
     const signedUrl = await storageService.getDownloadUrl(resumeKey).catch(() => null);
     if (signedUrl) {
       res.redirect(signedUrl);
@@ -419,23 +387,13 @@ export async function downloadResume(req: AuthenticatedRequest, res: Response): 
     }
   }
 
-  let fileBuffer: Buffer | null = null;
-  if (resumeKey) {
-    fileBuffer = await storageService.read(resumeKey);
-  }
-
-  // Provide generated fallback PDF if physical file buffer is missing from local storage
+  const fileBuffer = await storageService.read(resumeKey);
   if (!fileBuffer) {
-    fileBuffer = generateCandidatePdf(
-      application.candidateName,
-      application.candidateEmail,
-      application.job.title,
-      application.candidateTitle
-    );
-    resumeFilename = resumeFilename || `${application.candidateName.toLowerCase().replace(/\s+/g, "_")}_resume.pdf`;
+    res.status(404).json({ message: "Resume file is missing from storage." });
+    return;
   }
 
-  const safeFilename = (resumeFilename || "resume.pdf").replace(/[^\w.-]/g, "_");
+  const safeFilename = (resumeFilename || application.resumeName || "resume.pdf").replace(/[^\w.-]/g, "_");
 
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);

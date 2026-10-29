@@ -20,6 +20,7 @@ export interface StorageService {
   read(key: string): Promise<Buffer | null>;
   delete(key: string): Promise<void>;
   getDownloadUrl?(key: string): Promise<string | null>;
+  findLatestKeyForOwner?(ownerId: string): Promise<string | null>;
 }
 
 /**
@@ -77,6 +78,19 @@ class LocalPrivateStorageService implements StorageService {
     const filePath = path.join(this.baseDir, safeKey);
     if (fs.existsSync(filePath)) {
       await fs.promises.unlink(filePath).catch(() => {});
+    }
+  }
+
+  async findLatestKeyForOwner(ownerId: string): Promise<string | null> {
+    try {
+      if (!fs.existsSync(this.baseDir)) return null;
+      const files = await fs.promises.readdir(this.baseDir);
+      const userFiles = files.filter((f) => f.startsWith(`${ownerId}_`));
+      if (userFiles.length === 0) return null;
+      userFiles.sort().reverse();
+      return userFiles[0];
+    } catch {
+      return null;
     }
   }
 }
