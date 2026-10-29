@@ -26,11 +26,11 @@ export const loginSchema = z.object({
 });
 
 export const updateProfileSchema = z.object({
-  name: z.string().min(1).optional(),
-  title: z.string().optional(),
-  location: z.string().optional(),
-  phone: z.string().optional(),
-  bio: z.string().optional(),
+  name: z.string().min(1, "Name is required").optional(),
+  title: z.string().nullable().optional(),
+  location: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  bio: z.string().nullable().optional(),
 });
 
 export function toSafeUser(user: User) {
@@ -198,9 +198,17 @@ export async function updateProfile(req: AuthenticatedRequest, res: Response): P
     return;
   }
 
+  const { name, title, location, phone, bio } = req.body;
+  const updateData: Record<string, any> = {};
+  if (name !== undefined) updateData.name = name.trim();
+  if (title !== undefined) updateData.title = title ? title.trim() : null;
+  if (location !== undefined) updateData.location = location ? location.trim() : null;
+  if (phone !== undefined) updateData.phone = phone ? phone.trim() : null;
+  if (bio !== undefined) updateData.bio = bio ? bio.trim() : null;
+
   const updated = await prisma.user.update({
     where: { id: req.user.id },
-    data: req.body,
+    data: updateData,
   });
 
   res.status(200).json(toSafeUser(updated));

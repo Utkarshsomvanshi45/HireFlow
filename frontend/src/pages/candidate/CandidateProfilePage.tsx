@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useSession } from "@/hooks/use-session";
 import { formatDate } from "@/lib/format";
-import { setSession } from "@/services/session.service";
+import { updateUserProfile, uploadResumeFile } from "@/services/auth.service";
 import type { User } from "@/types";
 
 interface ProfileForm {
@@ -27,8 +27,10 @@ export function CandidateProfilePage() {
 
   const [form, setForm] = useState<ProfileForm | null>(null);
   const [resumeName, setResumeName] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [errors, setErrors] = useState<{ name?: string; email?: string }>({});
   const [saving, setSaving] = useState(false);
+  const [uploadingResume, setUploadingResume] = useState(false);
 
   useEffect(() => {
     document.title = "My Profile — HireFlow";
@@ -67,10 +69,14 @@ export function CandidateProfilePage() {
       event.target.value = "";
       return;
     }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File is too large. Maximum size is 5MB.");
+      event.target.value = "";
+      return;
+    }
+    setSelectedFile(file);
     setResumeName(file.name);
-    toast.success("Resume attached", {
-      description: "PDF upload to storage lands with the backend integration.",
-    });
+    toast.info(`Selected "${file.name}". Click "Save profile" to save all changes.`);
   };
 
   const save = async (event: React.FormEvent) => {
@@ -82,20 +88,48 @@ export function CandidateProfilePage() {
     if (Object.keys(nextErrors).length > 0) return;
 
     setSaving(true);
-    const updated: User = {
-      ...user!,
-      name: form.name.trim(),
-      email: form.email.trim().toLowerCase(),
-      phone: form.phone.trim() || undefined,
-      location: form.location.trim() || undefined,
-      title: form.title.trim() || undefined,
-      bio: form.bio.trim() || undefined,
-      resumeName: resumeName || undefined,
-      resumeUpdatedAt: resumeName ? new Date().toISOString().slice(0, 10) : user!.resumeUpdatedAt,
-    };
-    setSession({ user: updated });
-    setSaving(false);
-    toast.success("Profile saved");
+    try {
+      if (selectedFile) {
+        setUploadingResume(true);
+        const resumeRes = await uploadResumeFile(selectedFile);
+        setSelectedFile(null);
+        if (resumeRes.resumeName) {
+          setResumeName(resumeRes.resumeName);
+        }
+      }
+
+      const updatedUser = await updateUserProfile({
+        name: form.name.trim(),
+        phone: form.phone.trim() || undefined,
+        location: form.location.trim() || undefined,
+        title: form.title.trim() || undefined,
+        bio: form.bio.trim() || undefined,
+      });
+
+      setForm((prev) =>
+        prev
+          ? {
+              ...prev,
+              name: updatedUser.name,
+              phone: updatedUser.phone ?? "",
+              location: updatedUser.location ?? "",
+              title: updatedUser.title ?? "",
+              bio: updatedUser.bio ?? "",
+            }
+          : prev
+      );
+
+      if (updatedUser.resumeName) {
+        setResumeName(updatedUser.resumeName);
+      }
+
+      toast.success("Profile saved successfully");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to save profile. Please try again.");
+    } finally {
+      setSaving(false);
+      setUploadingResume(false);
+    }
   };
 
   return (
@@ -181,7 +215,7 @@ export function CandidateProfilePage() {
 
             <Button type="submit" disabled={saving}>
               <Save aria-hidden />
-              {saving ? "Saving…" : "Save profile"}
+              {uploadingResume ? "Uploading resume…" : saving ? "Saving profile…" : "Save profile"}
             </Button>
           </CardContent>
         </Card>
@@ -195,7 +229,7 @@ export function CandidateProfilePage() {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{resumeName}</p>
                   <p className="text-xs text-muted-foreground">
-                    {user?.resumeUpdatedAt ? `Updated ${formatDate(user.resumeUpdatedAt)}` : "PDF resume"}
+                    {user?.resumeUpdatedAt ? `Updated ${formatDate(user.resumeUpdatedAt)}` : "PDF resume attached"}
                   </p>
                 </div>
               </div>
@@ -216,9 +250,7 @@ export function CandidateProfilePage() {
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              In this prototype the resume file name is stored with your demo
-              profile; the file upload goes to server storage once the backend
-              is connected.
+              PDF resumes are validated and stored securely in backend storage. Maximum size: 5 MB.
             </p>
           </CardContent>
         </Card>

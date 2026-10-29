@@ -129,5 +129,68 @@ export async function logout(): Promise<void> {
   setSession(null);
 }
 
+export async function updateUserProfile(data: {
+  name?: string;
+  title?: string;
+  location?: string;
+  phone?: string;
+  bio?: string;
+}): Promise<User> {
+  if (!USE_MOCKS) {
+    const updatedUser = await api.patch<User>("/auth/profile", data);
+    const current = getSession();
+    setSession({ user: updatedUser, token: current?.token });
+    return updatedUser;
+  }
+
+  await mockDelay(300);
+  const current = getSession();
+  if (!current) throw new Error("No active session");
+  const updated: User = {
+    ...current.user,
+    ...data,
+  };
+  setSession({ user: updated });
+  return updated;
+}
+
+export async function uploadResumeFile(file: File): Promise<{ resumeName: string; resumeUpdatedAt: string; user?: User }> {
+  if (!USE_MOCKS) {
+    const formData = new FormData();
+    formData.append("resume", file);
+    const res = await api.post<{ message: string; resumeName: string; resumeUpdatedAt: string; user?: User }>(
+      "/candidate/resume",
+      formData
+    );
+    const current = getSession();
+    if (current) {
+      const nextUser = res.user || {
+        ...current.user,
+        resumeName: res.resumeName,
+        resumeUpdatedAt: res.resumeUpdatedAt,
+      };
+      setSession({
+        user: nextUser,
+        token: current.token,
+      });
+    }
+    return res;
+  }
+
+  await mockDelay(350);
+  const current = getSession();
+  const dateStr = new Date().toISOString().slice(0, 10);
+  if (current) {
+    setSession({
+      user: {
+        ...current.user,
+        resumeName: file.name,
+        resumeUpdatedAt: dateStr,
+      },
+    });
+  }
+  return { resumeName: file.name, resumeUpdatedAt: dateStr };
+}
+
 export const demoCredentials = DEMO_CREDENTIALS;
 export const demoEmployerUser = demoEmployer;

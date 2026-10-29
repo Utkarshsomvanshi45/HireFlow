@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import { prisma } from "../db/prisma.js";
 import { storageService } from "../services/storage.service.js";
 import type { AuthenticatedRequest } from "../middlewares/auth.js";
+import { toSafeUser } from "./auth.controller.js";
 import {
   ApplicationStatus,
   JobStatus,
@@ -367,6 +368,7 @@ export async function uploadCandidateResume(req: AuthenticatedRequest, res: Resp
     message: "Resume uploaded successfully.",
     resumeName: updatedUser.resumeName,
     resumeUpdatedAt: updatedUser.resumeUpdatedAt?.toISOString().slice(0, 10),
+    user: toSafeUser(updatedUser),
   });
 }
 

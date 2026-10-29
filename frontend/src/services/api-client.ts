@@ -43,14 +43,24 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   let response: Response;
   try {
+    const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+    const token = options.token || (typeof window !== "undefined" ? localStorage.getItem("hireflow_token") : null);
+    const headers: Record<string, string> = {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+    if (!isFormData) {
+      headers["Content-Type"] = "application/json";
+    }
+
     response = await fetch(`${API_BASE_URL}${path}`, {
       method: options.method ?? "GET",
       credentials: "include", // Send and receive HTTP-only session cookies
-      headers: {
-        "Content-Type": "application/json",
-        ...((options.token || (typeof window !== 'undefined' ? localStorage.getItem('hireflow_token') : null)) ? { Authorization: 'Bearer ' + (options.token || localStorage.getItem('hireflow_token')) } : {}),
-      },
-      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      headers,
+      body: isFormData
+        ? (options.body as FormData)
+        : options.body !== undefined
+        ? JSON.stringify(options.body)
+        : undefined,
     });
   } catch {
     throw new ApiError("Network request failed. Check your connection and try again.");
