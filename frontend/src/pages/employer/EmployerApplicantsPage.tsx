@@ -1,5 +1,5 @@
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Download, FileText, FileWarning, Users } from "lucide-react";
+import { ArrowLeft, Download, FileText, FileWarning, Trash2, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState, ErrorState } from "@/components/shared/empty-state";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import { formatDate } from "@/lib/format";
 import {
+  deleteApplication,
   downloadApplicationResume,
   listApplicationsForJob,
   updateApplicationStatus,
@@ -50,6 +51,7 @@ export function EmployerApplicantsPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = "Applicants — HireFlow";
@@ -118,6 +120,22 @@ export function EmployerApplicantsPage() {
       toast.error(err instanceof Error ? err.message : "Failed to download resume.");
     } finally {
       setDownloadingId(null);
+    }
+  };
+
+  const handleDeleteApplicant = async (application: Application) => {
+    if (!window.confirm(`Are you sure you want to delete applicant ${application.candidateName}?`)) {
+      return;
+    }
+    setDeletingId(application.id);
+    try {
+      await deleteApplication(application.id);
+      setApplications((prev) => (prev ? prev.filter((item) => item.id !== application.id) : prev));
+      toast.success(`Deleted applicant ${application.candidateName}.`);
+    } catch {
+      toast.error("Could not delete the applicant.");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -219,20 +237,31 @@ export function EmployerApplicantsPage() {
                   <TableCell>
                     <div className="flex flex-wrap items-center justify-end gap-1.5">
                       {nextActions[application.status].length === 0 ? (
-                        <span className="text-xs text-muted-foreground">No further actions</span>
+                        <span className="text-xs text-muted-foreground mr-1">No further actions</span>
                       ) : (
                         nextActions[application.status].map((action) => (
                           <Button
                             key={action.to}
                             variant={action.to === "rejected" ? "ghost" : "outline"}
                             size="sm"
-                            disabled={busyId === application.id}
+                            disabled={busyId === application.id || deletingId === application.id}
                             onClick={() => void changeStatus(application, action.to)}
                           >
                             {action.label}
                           </Button>
                         ))
                       )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        title="Delete applicant"
+                        disabled={busyId === application.id || deletingId === application.id}
+                        onClick={() => void handleDeleteApplicant(application)}
+                      >
+                        <Trash2 className="size-4" aria-hidden />
+                        <span className="sr-only">Delete applicant</span>
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>

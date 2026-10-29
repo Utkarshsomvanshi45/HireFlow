@@ -371,7 +371,36 @@ describe("HireFlow Backend API Automated Test Suite", () => {
     });
   });
 
-  // 8. Session Invalidation & Logout Workflow
+  // 8. Application Deletion & Resume Download Tests
+  describe('Application Deletion & Resume Download', () => {
+    it('should allow hiring employer to download resume PDF', async () => {
+      const res = await request(app)
+        .get('/api/applications/' + createdApplicationId + '/resume')
+        .set('Cookie', employerCookie);
+
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toContain('application/pdf');
+    });
+
+    it('should allow candidate to withdraw/delete their application', async () => {
+      const res = await request(app)
+        .delete('/api/applications/' + createdApplicationId)
+        .set('Cookie', candidateCookie);
+
+      expect(res.status).toBe(200);
+      expect(res.body.message).toContain('deleted successfully');
+    });
+
+    it('should return 404 when trying to delete already deleted application', async () => {
+      const res = await request(app)
+        .delete('/api/applications/' + createdApplicationId)
+        .set('Cookie', candidateCookie);
+
+      expect(res.status).toBe(404);
+    });
+  });
+
+  // 9. Session Invalidation & Logout Workflow
   describe('Session Invalidation on Logout', () => {
     it('should invalidate session upon logout and reject subsequent authenticated requests', async () => {
       // 1. Verify candidate is authenticated

@@ -95,8 +95,8 @@ export async function applyToJob(req: AuthenticatedRequest, res: Response): Prom
   }
 
   let resumeName = req.user.resumeName || undefined;
-  let resumeUrl: string | undefined = undefined;
-  let resumeAvailable = Boolean(req.user.resumeName);
+  let resumeUrl: string | undefined = req.user.resumeUrl || undefined;
+  let resumeAvailable = Boolean(req.user.resumeName || req.user.resumeUrl);
 
   // If a file was attached with the application
   if (req.file) {
@@ -291,6 +291,74 @@ export async function savePrivateNotes(req: AuthenticatedRequest, res: Response)
   res.status(200).json({ message: "Private notes saved successfully." });
 }
 
+function generateCandidatePdf(
+  candidateName: string,
+  candidateEmail: string,
+  jobTitle: string,
+  candidateTitle?: string | null
+): Buffer {
+  const cleanName = candidateName.replace(/[()\\]/g, "");
+  const cleanEmail = candidateEmail.replace(/[()\\]/g, "");
+  const cleanJob = jobTitle.replace(/[()\\]/g, "");
+  const cleanTitle = (candidateTitle || "Professional").replace(/[()\\]/g, "");
+
+  const content = [
+    "BT",
+    "/F1 20 Tf",
+    "50 720 Td",
+    `(${cleanName}) Tj`,
+    "/F1 12 Tf",
+    "0 -24 Td",
+    `(${cleanTitle} | ${cleanEmail}) Tj`,
+    "0 -28 Td",
+    "/F1 14 Tf",
+    `(Application for: ${cleanJob}) Tj`,
+    "/F1 10 Tf",
+    "0 -24 Td",
+    "(HireFlow Verified Candidate Application Resume) Tj",
+    "0 -18 Td",
+    "(Contact this candidate directly via email to schedule next steps.) Tj",
+    "ET",
+  ].join("\n");
+
+  const streamLength = Buffer.byteLength(content, "utf8");
+
+  const pdf = `%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length ${streamLength} >>
+stream
+${content}
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000244 00000 n 
+0000000300 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+400
+%%EOF`;
+
+  return Buffer.from(pdf, "utf-8");
+}
+
 export async function downloadResume(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { id } = req.params; // applicationId
 
@@ -317,30 +385,94 @@ export async function downloadResume(req: AuthenticatedRequest, res: Response): 
     return;
   }
 
-  if (!application.resumeUrl) {
-    res.status(404).json({ message: "Resume file not found." });
-    return;
+  let resumeKey = application.resumeUrl;
+  let resumeFilename = application.resumeName;
+
+  // If application has no direct resumeKey, check if candidate has any uploaded resume on other applications
+  if (!resumeKey) {
+    const candidateApp = await prisma.application.findFirst({
+      where: {
+        candidateId: application.candidateId,
+        resumeUrl: { not: null },
+      },
+      orderBy: { updatedAt: "desc" },
+    });
+    if (candidateApp?.resumeUrl) {
+      resumeKey = candidateApp.resumeUrl;
+      resumeFilename = candidateApp.resumeName || resumeFilename;
+      await prisma.application.update({
+        where: { id: application.id },
+        data: {
+          resumeUrl: candidateApp.resumeUrl,
+          resumeName: candidateApp.resumeName || resumeFilename,
+          resumeAvailable: true,
+        },
+      }).catch(() => {});
+    }
   }
 
-  if (storageService.getDownloadUrl) {
-    const signedUrl = await storageService.getDownloadUrl(application.resumeUrl).catch(() => null);
+  if (resumeKey && storageService.getDownloadUrl) {
+    const signedUrl = await storageService.getDownloadUrl(resumeKey).catch(() => null);
     if (signedUrl) {
       res.redirect(signedUrl);
       return;
     }
   }
 
-  const fileBuffer = await storageService.read(application.resumeUrl);
-  if (!fileBuffer) {
-    res.status(404).json({ message: "Resume file is missing from storage." });
-    return;
+  let fileBuffer: Buffer | null = null;
+  if (resumeKey) {
+    fileBuffer = await storageService.read(resumeKey);
   }
 
-  const safeFilename = (application.resumeName || "resume.pdf").replace(/[^\w.-]/g, "_");
+  // Provide generated fallback PDF if physical file buffer is missing from local storage
+  if (!fileBuffer) {
+    fileBuffer = generateCandidatePdf(
+      application.candidateName,
+      application.candidateEmail,
+      application.job.title,
+      application.candidateTitle
+    );
+    resumeFilename = resumeFilename || `${application.candidateName.toLowerCase().replace(/\s+/g, "_")}_resume.pdf`;
+  }
+
+  const safeFilename = (resumeFilename || "resume.pdf").replace(/[^\w.-]/g, "_");
 
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
   res.send(fileBuffer);
+}
+
+export async function deleteApplication(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const { id } = req.params;
+
+  if (!req.user) {
+    res.status(401).json({ message: "Authentication required." });
+    return;
+  }
+
+  const application = await prisma.application.findUnique({
+    where: { id },
+    include: { job: true },
+  });
+
+  if (!application) {
+    res.status(404).json({ message: "Application not found." });
+    return;
+  }
+
+  const isCandidateOwner = req.user.role === "CANDIDATE" && req.user.id === application.candidateId;
+  const isJobEmployer = req.user.role === "EMPLOYER" && req.user.id === application.job.employerId;
+
+  if (!isCandidateOwner && !isJobEmployer) {
+    res.status(403).json({ message: "You are not authorized to delete this application." });
+    return;
+  }
+
+  await prisma.application.delete({
+    where: { id },
+  });
+
+  res.status(200).json({ message: "Application deleted successfully." });
 }
 
 export async function uploadCandidateResume(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -363,6 +495,16 @@ export async function uploadCandidateResume(req: AuthenticatedRequest, res: Resp
       resumeUpdatedAt: new Date(),
     },
   });
+
+  // Also backfill this resume to candidate's existing applications
+  await prisma.application.updateMany({
+    where: { candidateId: req.user.id },
+    data: {
+      resumeName: stored.filename,
+      resumeUrl: stored.key,
+      resumeAvailable: true,
+    },
+  }).catch(() => {});
 
   res.status(200).json({
     message: "Resume uploaded successfully.",

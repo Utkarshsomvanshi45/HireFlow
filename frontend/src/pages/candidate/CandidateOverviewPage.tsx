@@ -1,14 +1,12 @@
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
-  Bell,
   CalendarCheck,
   Eye,
   FileText,
   Inbox,
   Mail,
   Send,
-  Sparkles,
   Trophy,
   UserRound,
 } from "lucide-react";
@@ -22,11 +20,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSession } from "@/hooks/use-session";
 import { formatDate } from "@/lib/format";
 import { listMyApplications } from "@/services/applications.service";
-import type { Application } from "@/types";
+import { getJob } from "@/services/jobs.service";
+import type { Application, Job } from "@/types";
+
+interface EnrichedApplication extends Application {
+  job?: Job | null;
+}
 
 export function CandidateOverviewPage() {
   const session = useSession();
-  const [applications, setApplications] = useState<Application[] | null>(null);
+  const [applications, setApplications] = useState<EnrichedApplication[] | null>(null);
   const [error, setError] = useState(false);
 
   useEffect(() => {
@@ -37,7 +40,26 @@ export function CandidateOverviewPage() {
     if (session === "loading" || session === null) return;
     let active = true;
     listMyApplications(session.user.id)
-      .then((apps) => active && setApplications(apps))
+      .then(async (apps) => {
+        if (!active) return;
+        const jobs = await Promise.all(
+          apps.map(async (app) => {
+            try {
+              return await getJob(app.jobId);
+            } catch {
+              return null;
+            }
+          }),
+        );
+        if (active) {
+          setApplications(
+            apps.map((app, index) => ({
+              ...app,
+              job: jobs[index] ?? (app as EnrichedApplication).job,
+            })),
+          );
+        }
+      })
       .catch(() => active && setError(true));
     return () => {
       active = false;
@@ -86,32 +108,6 @@ export function CandidateOverviewPage() {
             <Link to="/candidate/applications">
               <Mail className="size-4" />
               View Invitations
-            </Link>
-          </Button>
-        </div>
-      ) : underReview > 0 && applications?.some((a) => a.status === "shortlisted") ? (
-        <div className="mb-6 flex flex-col items-start justify-between gap-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 sm:flex-row sm:items-center sm:p-5 card-shadow">
-          <div className="flex items-start gap-3.5">
-            <div className="rounded-full bg-amber-500/10 p-2.5 text-amber-600">
-              <Sparkles className="size-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-display font-semibold text-foreground">
-                  Application Shortlisted!
-                </h3>
-                <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-700">
-                  Update
-                </span>
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Great news! An employer has shortlisted your application. Check your email for status notifications and interview scheduling next steps.
-              </p>
-            </div>
-          </div>
-          <Button variant="outline" size="sm" className="shrink-0" asChild>
-            <Link to="/candidate/applications">
-              Check Applications
             </Link>
           </Button>
         </div>
@@ -165,11 +161,13 @@ export function CandidateOverviewPage() {
                     <div className="min-w-0">
                       <Link
                         to={`/jobs/${application.jobId}`}
-                        className="block truncate text-sm font-medium hover:text-primary hover:underline"
+                        className="block truncate text-sm font-semibold text-foreground hover:text-primary hover:underline"
                       >
-                        {application.jobId.replace("job-", "Job #")}
+                        {application.job?.title ?? "Position"}
                       </Link>
-                      <p className="text-xs text-muted-foreground">Applied {formatDate(application.appliedAt)}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {application.job?.companyName ? `${application.job.companyName} • ` : ""}Applied {formatDate(application.appliedAt)}
+                      </p>
                     </div>
                     <StatusBadge status={application.status} />
                   </li>

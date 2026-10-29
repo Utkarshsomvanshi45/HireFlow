@@ -104,6 +104,13 @@ export async function savePrivateNotes(jobId: string, notes: string): Promise<vo
   privateNotes[jobId] = notes;
 }
 
+/** DELETE /applications/:id (candidate withdraws or employer deletes applicant) */
+export async function deleteApplication(applicationId: string): Promise<void> {
+  if (!USE_MOCKS) return api.delete<void>(`/applications/${applicationId}`);
+  await mockDelay(300);
+  store = store.filter((application) => application.id !== applicationId);
+}
+
 /** GET /applications/:id/resume — downloads or streams the candidate's resume PDF */
 export async function downloadApplicationResume(
   applicationId: string,

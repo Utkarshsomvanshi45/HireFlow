@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
-import { CalendarCheck, FileSearch, Mail, SearchX, Sparkles } from "lucide-react";
+import { CalendarCheck, FileSearch, Mail, SearchX, Sparkles, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { EmptyState, ErrorState } from "@/components/shared/empty-state";
 import { PageHeading } from "@/components/shared/page-heading";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -23,7 +24,7 @@ import {
 } from "@/components/ui/table";
 import { useSession } from "@/hooks/use-session";
 import { formatDate } from "@/lib/format";
-import { listMyApplications } from "@/services/applications.service";
+import { deleteApplication, listMyApplications } from "@/services/applications.service";
 import { getJob } from "@/services/jobs.service";
 import type { Application, Job } from "@/types";
 
@@ -35,8 +36,26 @@ export function CandidateApplicationsPage() {
   const session = useSession();
   const [rows, setRows] = useState<EnrichedApplication[] | null>(null);
   const [selectedInterviewApp, setSelectedInterviewApp] = useState<EnrichedApplication | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+
+  const handleDeleteApplication = async (application: EnrichedApplication) => {
+    const jobTitle = application.job?.title ?? "this position";
+    if (!window.confirm(`Are you sure you want to withdraw and delete your application for ${jobTitle}?`)) {
+      return;
+    }
+    setDeletingId(application.id);
+    try {
+      await deleteApplication(application.id);
+      setRows((prev) => (prev ? prev.filter((item) => item.id !== application.id) : prev));
+      toast.success("Application withdrawn and deleted.");
+    } catch {
+      toast.error("Could not delete the application.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   useEffect(() => {
     document.title = "My Applications — HireFlow";
@@ -167,16 +186,29 @@ export function CandidateApplicationsPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      {row.job ? (
-                        <Button variant="ghost" size="sm" asChild>
-                          <Link to={`/jobs/${row.jobId}`}>
-                            <FileSearch aria-hidden />
-                            View
-                          </Link>
+                      <div className="flex items-center justify-end gap-1.5">
+                        {row.job ? (
+                          <Button variant="ghost" size="sm" asChild>
+                            <Link to={`/jobs/${row.jobId}`}>
+                              <FileSearch aria-hidden />
+                              View
+                            </Link>
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground mr-2">Unavailable</span>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          title="Withdraw and delete application"
+                          disabled={deletingId === row.id}
+                          onClick={() => void handleDeleteApplication(row)}
+                        >
+                          <Trash2 className="size-3.5" aria-hidden />
+                          <span className="sr-only">Delete application</span>
                         </Button>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">Unavailable</span>
-                      )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

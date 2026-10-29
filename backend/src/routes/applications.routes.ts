@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   applyToJob,
+  deleteApplication,
   listMyApplications,
   listEmployerApplications,
   updateApplicationStatus,
@@ -41,6 +42,9 @@ router.patch("/:id/status", requireAuth, requireRole("EMPLOYER"), validateBody(u
 
 // Resume download (authorized candidate or employer)
 router.get("/:id/resume", requireAuth, downloadResume);
+
+// Delete application (candidate withdraws or employer deletes applicant)
+router.delete("/:id", requireAuth, deleteApplication);
 
 export default router;
 
