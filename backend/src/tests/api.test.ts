@@ -22,6 +22,7 @@ describe("HireFlow Backend API Automated Test Suite", () => {
       where: {
         email: {
           in: [testCandidateEmail, testEmployerEmail, testOtherEmployerEmail],
+
         },
       },
     });
@@ -33,6 +34,7 @@ describe("HireFlow Backend API Automated Test Suite", () => {
       where: {
         email: {
           in: [testCandidateEmail, testEmployerEmail, testOtherEmployerEmail],
+
         },
       },
     });
@@ -368,6 +370,9 @@ describe("HireFlow Backend API Automated Test Suite", () => {
 
       expect(res.status).toBe(400);
       expect(res.body.message).toContain('closed and no longer accepting applications');
+
+      // Immediately delete this temporary test candidate
+      await prisma.user.deleteMany({ where: { email: freshEmail } });
     });
   });
 
