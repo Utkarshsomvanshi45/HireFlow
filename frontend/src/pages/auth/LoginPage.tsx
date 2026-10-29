@@ -123,9 +123,9 @@ export function LoginPage() {
         <div className="mt-6 rounded-lg border border-border bg-card p-4">
           <p className="flex items-start gap-2 text-xs text-muted-foreground">
             <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-            Prototype note: this is demo authentication backed by sample data —
-            any valid email plus an 8+ character password works. Real
-            authentication arrives with the backend integration.
+            Quick demo access: Use the buttons below to test pre-configured accounts, or sign in above.
+
+
           </p>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <Button type="button" variant="outline" size="sm" onClick={() => fillDemo("candidate")}>

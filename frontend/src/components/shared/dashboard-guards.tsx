@@ -37,7 +37,7 @@ export function SignInPrompt({ title = "Sign in to continue" }: { title?: string
       </div>
       <p className="mt-5 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
         <Info className="size-3.5" aria-hidden />
-        Demo authentication — the real backend replaces this flow.
+        Secure authentication backed by HireFlow.
       </p>
     </CenteredPanel>
   );

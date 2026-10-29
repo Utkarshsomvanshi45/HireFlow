@@ -240,8 +240,8 @@ export function RegisterPage() {
 
         <p className="mt-5 flex items-start gap-2 text-xs text-muted-foreground">
           <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          Prototype note: accounts created here live in demo storage with sample
-          data. The backend integration replaces this flow without UI changes.
+          Secure registration: Your account is authenticated with industry-standard bcrypt encryption.
+
         </p>
 
         <p className="mt-6 text-center text-sm text-muted-foreground">

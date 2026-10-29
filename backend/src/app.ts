@@ -21,9 +21,18 @@ app.use(
     origin: (origin, callback) => {
       // Allow requests with no origin (e.g. mobile apps, curl, same-origin)
       if (!origin) return callback(null, true);
+      let hostname = "";
+      try {
+        hostname = new URL(origin).hostname;
+      } catch {
+        hostname = "";
+      }
       const isAllowed =
         allowedOrigins.includes(origin) ||
-        (config.isProduction && /^https:\/\/[a-zA-Z0-9_-]+\.vercel\.app$/.test(origin));
+        hostname.endsWith(".vercel.app") ||
+        hostname === "localhost" ||
+        hostname === "127.0.0.1";
+
       if (isAllowed) {
         return callback(null, true);
       }
@@ -44,6 +53,7 @@ app.use(authenticate);
 
 // Mount main API
 app.use("/api", apiRouter);
+app.use(apiRouter);
 
 // Fallback 404 for unknown API endpoints
 app.use("/api/*", (_req, res) => {

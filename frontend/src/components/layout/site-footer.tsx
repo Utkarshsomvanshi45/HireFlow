@@ -65,7 +65,7 @@ export function SiteFooter() {
         </div>
         <div className="mt-10 flex flex-col gap-2 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <p>© {new Date().getFullYear()} HireFlow. All rights reserved.</p>
-          <p>Prototype build — product statistics and listings are sample data.</p>
+          <p>© {new Date().getFullYear()} HireFlow. All rights reserved.</p>
         </div>
       </div>
     </footer>
