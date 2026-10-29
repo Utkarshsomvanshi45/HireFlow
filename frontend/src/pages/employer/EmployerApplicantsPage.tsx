@@ -1,5 +1,5 @@
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, FileText, FileWarning, Users } from "lucide-react";
+import { ArrowLeft, Download, FileText, FileWarning, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState, ErrorState } from "@/components/shared/empty-state";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import { formatDate } from "@/lib/format";
 import {
+  downloadApplicationResume,
   listApplicationsForJob,
   updateApplicationStatus,
   type Application,
@@ -30,11 +31,11 @@ const nextActions: Record<ApplicationStatus, Array<{ label: string; to: Applicat
     { label: "Reject", to: "rejected" },
   ],
   shortlisted: [
-    { label: "Interview", to: "interview" },
+    { label: "Invite to Interview", to: "interview" },
     { label: "Reject", to: "rejected" },
   ],
   interview: [
-    { label: "Hire", to: "hired" },
+    { label: "Make Offer / Hire", to: "hired" },
     { label: "Reject", to: "rejected" },
   ],
   hired: [],
@@ -48,6 +49,7 @@ export function EmployerApplicantsPage() {
   const [error, setError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = "Applicants — HireFlow";
@@ -91,11 +93,31 @@ export function EmployerApplicantsPage() {
           ? prev.map((item) => (item.id === application.id ? { ...item, status } : item))
           : prev,
       );
-      toast.success(`${application.candidateName} → ${status}`);
+      if (status === "shortlisted") {
+        toast.success(`Shortlisted ${application.candidateName}! Candidate notified.`);
+      } else if (status === "interview") {
+        toast.success(`Interview invitation sent to ${application.candidateName}! Candidate notified to check email.`);
+      } else if (status === "hired") {
+        toast.success(`Offer extended to ${application.candidateName}! Status marked as Hired.`);
+      } else {
+        toast.info(`${application.candidateName} moved to ${status}`);
+      }
     } catch {
       toast.error("Could not update the applicant's status.");
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const handleDownloadResume = async (application: Application) => {
+    setDownloadingId(application.id);
+    try {
+      await downloadApplicationResume(application.id, application.candidateName);
+      toast.success(`Downloaded resume for ${application.candidateName}`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to download resume.");
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -173,14 +195,21 @@ export function EmployerApplicantsPage() {
                   </TableCell>
                   <TableCell>
                     {application.resumeAvailable ? (
-                      <span className="inline-flex items-center gap-1.5 text-sm text-foreground">
-                        <FileText className="size-4 text-primary" aria-hidden />
-                        Available
-                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1.5 text-xs text-primary font-medium hover:bg-primary/10"
+                        disabled={downloadingId === application.id}
+                        onClick={() => void handleDownloadResume(application)}
+                        title="Download candidate resume PDF"
+                      >
+                        <Download className="size-3.5" aria-hidden />
+                        {downloadingId === application.id ? "Downloading…" : "Download"}
+                      </Button>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-                        <FileWarning className="size-4" aria-hidden />
-                        Missing
+                      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <FileWarning className="size-3.5" aria-hidden />
+                        Not attached
                       </span>
                     )}
                   </TableCell>

@@ -1,5 +1,5 @@
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, ClipboardList, Lock, Save } from "lucide-react";
+import { ArrowLeft, ClipboardList, Download, Lock, Save } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorState } from "@/components/shared/empty-state";
@@ -18,6 +18,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
+  downloadApplicationResume,
   getPrivateNotes,
   listApplicationsForJob,
   savePrivateNotes,
@@ -42,6 +43,7 @@ export function EmployerPipelinePage() {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<ApplicationStatus | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   // Private notes state (employer-only, never shown to candidates).
   const [notesJobId, setNotesJobId] = useState(id ?? "");
@@ -97,6 +99,9 @@ export function EmployerPipelinePage() {
 
   const moveApplication = async (applicationId: string, status: ApplicationStatus) => {
     const previous = applications;
+    const targetApp = applications?.find((item) => item.id === applicationId);
+    const candidateName = targetApp?.candidateName ?? "Candidate";
+
     setApplications((prev) =>
       prev ? prev.map((item) => (item.id === applicationId ? { ...item, status } : item)) : prev,
     );
@@ -104,10 +109,30 @@ export function EmployerPipelinePage() {
     setDragOverColumn(null);
     try {
       await updateApplicationStatus(applicationId, status);
-      toast.success(`Moved to ${columns.find((column) => column.key === status)?.title}`);
+      if (status === "shortlisted") {
+        toast.success(`Shortlisted ${candidateName}! Candidate notified.`);
+      } else if (status === "interview") {
+        toast.success(`Interview invitation sent to ${candidateName}! Candidate notified to check email.`);
+      } else if (status === "hired") {
+        toast.success(`Offer extended to ${candidateName}! Status marked as Hired.`);
+      } else {
+        toast.info(`Moved to ${columns.find((column) => column.key === status)?.title}`);
+      }
     } catch {
       setApplications(previous);
       toast.error("Could not move the candidate. Please try again.");
+    }
+  };
+
+  const handleDownloadResume = async (application: Application) => {
+    setDownloadingId(application.id);
+    try {
+      await downloadApplicationResume(application.id, application.candidateName);
+      toast.success(`Downloaded resume for ${application.candidateName}`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to download resume.");
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -210,12 +235,19 @@ export function EmployerPipelinePage() {
                           </p>
                         </div>
                         {application.resumeAvailable ? (
-                          <span
-                            className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-[10px] font-medium text-accent-foreground"
-                            title="Resume available"
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleDownloadResume(application);
+                            }}
+                            disabled={downloadingId === application.id}
+                            className="inline-flex items-center gap-1 shrink-0 rounded bg-accent hover:bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium text-accent-foreground transition-colors cursor-pointer"
+                            title="Download candidate resume PDF"
                           >
-                            CV
-                          </span>
+                            <Download className="size-2.5" aria-hidden />
+                            {downloadingId === application.id ? "…" : "CV"}
+                          </button>
                         ) : null}
                       </div>
                       <div className="mt-2.5 flex items-center justify-between gap-2">

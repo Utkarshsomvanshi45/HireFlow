@@ -1,10 +1,14 @@
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
+  Bell,
+  CalendarCheck,
   Eye,
   FileText,
   Inbox,
+  Mail,
   Send,
+  Sparkles,
   Trophy,
   UserRound,
 } from "lucide-react";
@@ -56,6 +60,62 @@ export function CandidateOverviewPage() {
           </Button>
         }
       />
+
+      {/* Dynamic Status Notifications for Candidate */}
+      {interviews > 0 ? (
+        <div className="mb-6 flex flex-col items-start justify-between gap-4 rounded-xl border border-primary/30 bg-primary/5 p-4 sm:flex-row sm:items-center sm:p-5 card-shadow">
+          <div className="flex items-start gap-3.5">
+            <div className="rounded-full bg-primary/10 p-2.5 text-primary">
+              <CalendarCheck className="size-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-display font-semibold text-foreground">
+                  Interview Invitation Received!
+                </h3>
+                <span className="inline-flex items-center rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
+                  Action required
+                </span>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                You have {interviews} interview invitation{interviews > 1 ? "s" : ""}. An email notification with calendar and meeting details has been sent to your inbox.
+              </p>
+            </div>
+          </div>
+          <Button size="sm" className="shrink-0 gap-1.5" asChild>
+            <Link to="/candidate/applications">
+              <Mail className="size-4" />
+              View Invitations
+            </Link>
+          </Button>
+        </div>
+      ) : underReview > 0 && applications?.some((a) => a.status === "shortlisted") ? (
+        <div className="mb-6 flex flex-col items-start justify-between gap-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 sm:flex-row sm:items-center sm:p-5 card-shadow">
+          <div className="flex items-start gap-3.5">
+            <div className="rounded-full bg-amber-500/10 p-2.5 text-amber-600">
+              <Sparkles className="size-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-display font-semibold text-foreground">
+                  Application Shortlisted!
+                </h3>
+                <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                  Update
+                </span>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Great news! An employer has shortlisted your application. Check your email for status notifications and interview scheduling next steps.
+              </p>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" className="shrink-0" asChild>
+            <Link to="/candidate/applications">
+              Check Applications
+            </Link>
+          </Button>
+        </div>
+      ) : null}
 
       {error ? (
         <p role="alert" className="rounded-md border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive">

@@ -1,4 +1,4 @@
-import { api, mockDelay, USE_MOCKS } from "./api-client";
+import { api, mockDelay, USE_MOCKS, API_BASE_URL } from "./api-client";
 import { mockApplications, nextId } from "@/data/mock/applications";
 import { mockJobs } from "@/data/mock/jobs";
 import type { Application, ApplicationStatus, ApplyInput } from "@/types";
@@ -102,4 +102,56 @@ export async function savePrivateNotes(jobId: string, notes: string): Promise<vo
   if (!USE_MOCKS) return api.put<void>(`/jobs/${jobId}/private-notes`, { notes });
   await mockDelay(250);
   privateNotes[jobId] = notes;
+}
+
+/** GET /applications/:id/resume — downloads or streams the candidate's resume PDF */
+export async function downloadApplicationResume(
+  applicationId: string,
+  candidateName = "candidate",
+): Promise<void> {
+  if (USE_MOCKS) {
+    const dummyBlob = new Blob(
+      ["%PDF-1.5 Sample Resume Document for " + candidateName],
+      { type: "application/pdf" },
+    );
+    const dummyUrl = URL.createObjectURL(dummyBlob);
+    const a = document.createElement("a");
+    a.href = dummyUrl;
+    a.download = `${candidateName.toLowerCase().replace(/\s+/g, "_")}_resume.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(dummyUrl);
+    return;
+  }
+
+  const token = typeof window !== "undefined" ? localStorage.getItem("hireflow_token") : null;
+  const res = await fetch(`${API_BASE_URL}/applications/${applicationId}/resume`, {
+    method: "GET",
+    credentials: "include",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (!res.ok) {
+    const errorText = await res.json().catch(() => null);
+    throw new Error(errorText?.message || "Failed to download resume.");
+  }
+
+  const blob = await res.blob();
+  const downloadUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = downloadUrl;
+
+  const disposition = res.headers.get("content-disposition");
+  let filename = `${candidateName.toLowerCase().replace(/\s+/g, "_")}_resume.pdf`;
+  if (disposition && disposition.includes("filename=")) {
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    if (match?.[1]) filename = match[1];
+  }
+
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(downloadUrl);
 }
