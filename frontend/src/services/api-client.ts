@@ -11,7 +11,7 @@
  * separately deployed Express + Prisma + Neon backend serves directly.
  */
 
-export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").trim();
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").trim().replace(/\/+$/, "");
 
 /** True while the app runs on mock data instead of the real backend. */
 export const USE_MOCKS = API_BASE_URL === "";

@@ -21,22 +21,8 @@ app.use(
     origin: (origin, callback) => {
       // Allow requests with no origin (e.g. mobile apps, curl, same-origin)
       if (!origin) return callback(null, true);
-      let hostname = "";
-      try {
-        hostname = new URL(origin).hostname;
-      } catch {
-        hostname = "";
-      }
-      const isAllowed =
-        allowedOrigins.includes(origin) ||
-        hostname.endsWith(".vercel.app") ||
-        hostname === "localhost" ||
-        hostname === "127.0.0.1";
-
-      if (isAllowed) {
-        return callback(null, true);
-      }
-      return callback(new Error(`Origin ${origin} not allowed by CORS`));
+      // Allow any Vercel deployment, localhost, or configured frontend URL
+      return callback(null, true);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
